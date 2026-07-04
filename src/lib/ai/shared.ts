@@ -63,7 +63,11 @@ export function identityInstruction(listing: DomesticListing): string {
 Seller title (hint only): ${listing.title}
 Seller description (hint only): ${listing.description?.slice(0, 500) ?? ""}
 
-Analyze: product name (prefer the international/original-language name used on eBay/Mercari), platform/category, region edition (일본판/북미판/아시아판/유럽판), version/edition, condition, whether factory-sealed, box state, included components, cover/artwork design, region code (CERO/ESRB/PEGI/barcode country), and which additional photos are needed to be sure.
+MOST IMPORTANT: READ the exact individual title/subtitle printed on the box/package/label (OCR, including Japanese text). The series name alone is NOT enough — e.g. not just "Dragon Ball Z" but the specific title like "Dragon Ball Z Super Gokuden Kakusei-hen". Same-series games/toys with different subtitles are DIFFERENT products.
+Numbers in the seller's title may be the seller's own catalog numbers — IGNORE them unless clearly a product model number printed on the item.
+If you cannot read the individual subtitle from the images, lower the accuracy score.
+
+Analyze: product name (prefer the international/original-language name used on eBay/Mercari, including the individual subtitle), platform/category, region edition (일본판/북미판/아시아판/유럽판), version/edition, condition, whether factory-sealed, box state, included components, cover/artwork design, region code (CERO/ESRB/PEGI/barcode country), and which additional photos are needed to be sure.
 
 Respond with ONLY a JSON object, no prose, matching exactly:
 ${IDENTITY_JSON_SHAPE}`;
@@ -75,7 +79,10 @@ export function queryInstruction(identity: ProductIdentity): string {
 Identified product:
 ${JSON.stringify(identity)}
 
-Produce concise search queries (English or original language, as buyers would search) for each source. Include region/edition keywords when relevant.
+Rules per source:
+- "ebay" / "pricecharting": ENGLISH queries — brand + series + INDIVIDUAL title/subtitle + platform. Japanese games use the commonly-used romanized title. Never include Korean words or seller catalog numbers.
+- "mercari" / "yahoo-auction": JAPANESE queries (일본어 표기 필수 — these are Japanese marketplaces and Japanese buyers search in Japanese). Use the original Japanese product title when known.
+Include region/edition keywords when relevant. Keep each query concise (what a buyer would actually type).
 
 Respond with ONLY a JSON object:
 {"ebay":string[],"mercari":string[],"yahoo-auction":string[],"pricecharting":string[]}`;

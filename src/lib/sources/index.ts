@@ -1,4 +1,4 @@
-import { fetchEbayActive, fetchEbaySold } from "@/lib/sources/ebay";
+import { fetchEbayActive, fetchEbayActiveByImage, fetchEbaySold } from "@/lib/sources/ebay";
 import { fetchMercariActive, fetchMercariSold } from "@/lib/sources/mercari";
 import { fetchPriceCharting } from "@/lib/sources/pricecharting";
 import { fetchBuyeeActive, fetchFromJapanActive } from "@/lib/sources/proxy-malls";
@@ -31,8 +31,17 @@ export async function collectSold(queries: SearchQueries, rates: Rates): Promise
   return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 }
 
+export interface CollectActiveOptions {
+  /** 국내 상품 대표 이미지 — eBay search_by_image(시각 매칭)에 사용. 키 없으면 무시. */
+  imageUrl?: string;
+}
+
 /** 현재 판매중(active) 데이터를 모든 소스에서 병렬 수집한다. 개별 실패는 무시된다. */
-export async function collectActive(queries: SearchQueries, rates: Rates): Promise<ActiveListing[]> {
+export async function collectActive(
+  queries: SearchQueries,
+  rates: Rates,
+  opts: CollectActiveOptions = {},
+): Promise<ActiveListing[]> {
   const fb = primaryFallback(queries);
   const tasks: Promise<ActiveListing[]>[] = [
     fetchEbayActive(queryFor(queries, "ebay", fb), rates),
@@ -41,6 +50,17 @@ export async function collectActive(queries: SearchQueries, rates: Rates): Promi
     fetchBuyeeActive(fb, rates),
     fetchFromJapanActive(fb, rates),
   ];
+  // 이미지 기반 매칭(제목이 부실한 토이/피규어에 특히 효과) — 텍스트 검색과 병행
+  if (opts.imageUrl) tasks.push(fetchEbayActiveByImage(opts.imageUrl, rates));
   const settled = await Promise.allSettled(tasks);
-  return settled.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
+  // 같은 매물이 텍스트/이미지 검색에 모두 잡히면 URL 기준으로 한 번만 남긴다
+  const seen = new Set<string>();
+  return settled
+    .flatMap((r) => (r.status === "fulfilled" ? r.value : []))
+    .filter((l) => {
+      const key = `${l.source}|${l.url}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }

@@ -74,7 +74,9 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
   // 6~7) 판매완료/판매중 수집
   const [soldRaw, activeRaw] = await Promise.all([
     overrides.sold ? Promise.resolve(overrides.sold) : collectSold(queries, rates),
-    overrides.active ? Promise.resolve(overrides.active) : collectActive(queries, rates),
+    overrides.active
+      ? Promise.resolve(overrides.active)
+      : collectActive(queries, rates, { imageUrl: listing.images[0] }),
   ]);
 
   // 8~9) 동일 제품 검증 + 불일치 제거 (matched 플래그 재판정)
