@@ -1,0 +1,192 @@
+import { describe, expect, it } from "vitest";
+
+import { DEFAULT_FEES } from "@/lib/config/fees";
+import { verifyMatch } from "@/lib/pipeline/filter";
+import { mean, median, quantile, removeOutliersIQR } from "@/lib/pipeline/outliers";
+import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
+import { breakEvenBuyPrice, computeProfit, maxBuyForTargets } from "@/lib/pipeline/profit";
+import { suggestPrices } from "@/lib/pipeline/suggest";
+import { classifyVerdict, computeSellDifficulty } from "@/lib/pipeline/verdict";
+import type { ActiveListing, ProductIdentity, SoldListing } from "@/lib/types";
+
+const identity: ProductIdentity = {
+  name: "Zelda Tears of the Kingdom Switch",
+  platform: "Nintendo Switch",
+  region: "일본판",
+  version: "일반판",
+  condition: "미개봉",
+  sealed: true,
+  boxState: "양호",
+  components: ["게임팩", "케이스"],
+  coverDesign: "골드 로고",
+  regionCode: "CERO",
+  accuracy: 90,
+  missingPhotos: [],
+};
+
+function sold(source: SoldListing["source"], priceKRW: number, matched = true, title = identity.name): SoldListing {
+  return { source, title, priceOriginal: priceKRW, currency: "KRW", priceKRW, url: "#", matched };
+}
+
+function active(priceKRW: number, shipping = 0, matched = true): ActiveListing {
+  return {
+    source: "ebay",
+    title: identity.name,
+    priceOriginal: priceKRW,
+    currency: "KRW",
+    priceKRW,
+    shippingKRW: shipping,
+    buyerPerceivedKRW: priceKRW + shipping,
+    url: "#",
+    matched,
+  };
+}
+
+describe("outliers", () => {
+  it("quantile interpolates", () => {
+    expect(quantile([10, 20, 30, 40], 0.5)).toBeCloseTo(25);
+    expect(quantile([10, 20, 30, 40], 0.25)).toBeCloseTo(17.5);
+  });
+
+  it("median/mean", () => {
+    expect(median([3, 1, 2])).toBe(2);
+    expect(mean([2, 4, 6])).toBe(4);
+  });
+
+  it("removes IQR outliers when n>=4", () => {
+    const out = removeOutliersIQR([100, 105, 110, 115, 1000]);
+    expect(out).not.toContain(1000);
+    expect(out.length).toBe(4);
+  });
+
+  it("keeps data when n<4", () => {
+    expect(removeOutliersIQR([100, 5000])).toEqual([100, 5000]);
+  });
+});
+
+describe("sold/active stats", () => {
+  it("computes conservative<base<aggressive and drops outliers", () => {
+    const listings = [
+      sold("ebay", 100_000),
+      sold("mercari", 110_000),
+      sold("yahoo-auction", 120_000),
+      sold("pricecharting", 130_000),
+      sold("ebay", 900_000), // outlier
+    ];
+    const stats = computeSoldStats(listings);
+    expect(stats.rawN).toBe(5);
+    expect(stats.sampleN).toBe(4);
+    expect(stats.conservative).toBeLessThanOrEqual(stats.base);
+    expect(stats.base).toBeLessThanOrEqual(stats.aggressive);
+    expect(stats.aggressive).toBeLessThan(900_000);
+  });
+
+  it("ignores unmatched listings", () => {
+    const stats = computeSoldStats([sold("ebay", 100_000), sold("ebay", 500_000, false)]);
+    expect(stats.base).toBe(100_000);
+  });
+
+  it("active stats include buyer-perceived shipping", () => {
+    const stats = computeActiveStats([active(100_000, 15_000), active(120_000, 15_000)]);
+    expect(stats.minCompetitor).toBe(100_000);
+    expect(stats.buyerPerceivedAvg).toBe(125_000);
+    expect(stats.listingCount).toBe(2);
+  });
+});
+
+describe("profit", () => {
+  it("subtracts all costs from sale price", () => {
+    const p = computeProfit(300_000, 150_000, DEFAULT_FEES);
+    // gross contribution = 300000*(1-0.21) - 23000 = 237000 - 23000 = 214000; net = 214000-150000=64000
+    expect(p.netProfit).toBe(64_000);
+    expect(p.marginPct).toBeCloseTo(42.7, 0);
+  });
+
+  it("break-even buy price yields ~0 net profit", () => {
+    const S = 300_000;
+    const be = breakEvenBuyPrice(S, DEFAULT_FEES);
+    const p = computeProfit(S, be, DEFAULT_FEES);
+    expect(Math.abs(p.netProfit)).toBeLessThanOrEqual(1);
+  });
+
+  it("maxBuyForTargets respects both profit and margin constraints", () => {
+    const S = 300_000;
+    const maxBuy = maxBuyForTargets(S, 20_000, 20, DEFAULT_FEES);
+    const p = computeProfit(S, maxBuy, DEFAULT_FEES);
+    expect(p.netProfit).toBeGreaterThanOrEqual(19_999);
+    expect(p.marginPct).toBeGreaterThanOrEqual(19.9);
+  });
+});
+
+describe("verdict classification (threshold boundaries)", () => {
+  const mk = (netProfit: number, marginPct: number) =>
+    ({
+      expectedSalePriceKRW: 0,
+      sellingFee: 0,
+      paymentFee: 0,
+      intlShipping: 0,
+      packing: 0,
+      domesticShipping: 0,
+      fxRisk: 0,
+      claimRisk: 0,
+      domesticBuyPrice: 0,
+      netProfit,
+      marginPct,
+    }) as const;
+
+  it("RECOMMEND at 5만/30%", () => {
+    expect(classifyVerdict(mk(50_000, 30))).toBe("RECOMMEND");
+  });
+  it("CONDITIONAL at 2만/20%", () => {
+    expect(classifyVerdict(mk(20_000, 20))).toBe("CONDITIONAL");
+  });
+  it("HOLD just under conditional", () => {
+    expect(classifyVerdict(mk(19_999, 50))).toBe("HOLD");
+    expect(classifyVerdict(mk(40_000, 15))).toBe("HOLD");
+  });
+  it("AVOID on loss", () => {
+    expect(classifyVerdict(mk(-1, 100))).toBe("AVOID");
+  });
+});
+
+describe("sell difficulty", () => {
+  it("scales with listing count", () => {
+    expect(
+      computeSellDifficulty({ minCompetitor: 0, avgCompetitor: 0, topTier: 0, buyerPerceivedAvg: 0, listingCount: 2 }),
+    ).toBe("LOW");
+    expect(
+      computeSellDifficulty({ minCompetitor: 0, avgCompetitor: 0, topTier: 0, buyerPerceivedAvg: 0, listingCount: 12 }),
+    ).toBe("MEDIUM");
+    expect(
+      computeSellDifficulty({ minCompetitor: 0, avgCompetitor: 0, topTier: 0, buyerPerceivedAvg: 0, listingCount: 30 }),
+    ).toBe("HIGH");
+  });
+});
+
+describe("same-product filter", () => {
+  it("matches on name overlap", () => {
+    expect(verifyMatch("Zelda Tears of the Kingdom Nintendo Switch JP", identity).matched).toBe(true);
+  });
+  it("rejects unrelated title", () => {
+    expect(verifyMatch("Sony PlayStation 5 Console", identity).matched).toBe(false);
+  });
+  it("rejects region mismatch", () => {
+    const r = verifyMatch("Zelda Tears of the Kingdom Switch USA ESRB North America", identity);
+    expect(r.matched).toBe(false);
+  });
+});
+
+describe("price suggestion", () => {
+  it("quick <= base and premium bumped when eligible", () => {
+    const soldStats = computeSoldStats([
+      sold("ebay", 100_000),
+      sold("mercari", 110_000),
+      sold("yahoo-auction", 120_000),
+      sold("pricecharting", 130_000),
+    ]);
+    const activeStats = computeActiveStats([active(115_000), active(140_000), active(160_000)]);
+    const s = suggestPrices(soldStats, activeStats, identity, "LOW");
+    expect(s.quick).toBeLessThanOrEqual(s.base);
+    expect(s.finalRecommended).toBeGreaterThan(0);
+  });
+});
