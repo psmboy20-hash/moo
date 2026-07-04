@@ -1,4 +1,4 @@
-import { analyzeImages, generateSearchQueries } from "@/lib/ai/claude-cli";
+import { analyzeImages, generateSearchQueries } from "@/lib/ai";
 import { fallbackIdentity, fallbackQueries } from "@/lib/ai/fallback";
 import { DEFAULT_FEES } from "@/lib/config/fees";
 import { getRates } from "@/lib/config/fx";

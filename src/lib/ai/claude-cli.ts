@@ -1,3 +1,4 @@
+import { coerceIdentity, coerceQueries, extractJson, queryInstruction } from "@/lib/ai/shared";
 import type { DomesticListing, ProductIdentity, SearchQueries } from "@/lib/types";
 
 import { execFile } from "node:child_process";
@@ -13,6 +14,11 @@ const CLI_TIMEOUT_MS = 90_000;
 const MAX_BUFFER = 8 * 1024 * 1024;
 const MAX_IMAGES = 4;
 
+/** claude CLI 사용 가능 여부(환경 변수로 비활성화 가능) */
+export function isClaudeCliEnabled(): boolean {
+  return process.env.DISABLE_CLAUDE_CLI !== "1";
+}
+
 /** Claude CLI를 print 모드로 호출하고 결과 텍스트를 반환한다 */
 async function runClaude(prompt: string): Promise<string> {
   const { stdout } = await execFileAsync(CLI, ["-p", prompt, "--output-format", "json", "--allowedTools", "Read"], {
@@ -25,20 +31,6 @@ async function runClaude(prompt: string): Promise<string> {
     return typeof env.result === "string" ? env.result : stdout;
   } catch {
     return stdout;
-  }
-}
-
-/** 텍스트에서 첫 번째 JSON 객체를 추출해 파싱한다 */
-function extractJson(text: string): Record<string, unknown> | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf("{");
-  const end = candidate.lastIndexOf("}");
-  if (start === -1 || end === -1 || end <= start) return null;
-  try {
-    return JSON.parse(candidate.slice(start, end + 1)) as Record<string, unknown>;
-  } catch {
-    return null;
   }
 }
 
@@ -67,32 +59,7 @@ async function downloadImages(urls: string[]): Promise<{ dir: string; paths: str
   return { dir, paths };
 }
 
-function str(v: unknown, fallback = "미상"): string {
-  return typeof v === "string" && v.trim() ? v.trim() : fallback;
-}
-function strArray(v: unknown): string[] {
-  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim().length > 0) : [];
-}
-
-function coerceIdentity(json: Record<string, unknown>): ProductIdentity {
-  const acc = Number(json.accuracy);
-  return {
-    name: str(json.name, ""),
-    platform: str(json.platform),
-    region: str(json.region),
-    version: str(json.version),
-    condition: str(json.condition),
-    sealed: json.sealed === true ? true : json.sealed === false ? false : null,
-    boxState: str(json.boxState),
-    components: strArray(json.components),
-    coverDesign: str(json.coverDesign),
-    regionCode: str(json.regionCode),
-    accuracy: Number.isFinite(acc) ? Math.max(0, Math.min(100, acc)) : 50,
-    missingPhotos: strArray(json.missingPhotos),
-  };
-}
-
-const IDENTITY_PROMPT = (
+const identityPromptWithPaths = (
   paths: string[],
   listing: DomesticListing,
 ) => `You are a reselling product identification expert. Read the product images with the Read tool at these absolute paths and identify the product PRIMARILY from the images (the seller's title can be wrong; use it only as a hint).
@@ -112,15 +79,14 @@ Respond with ONLY a JSON object, no prose, matching exactly:
  * Claude CLI로 상품 이미지를 분석해 제품을 식별한다.
  * CLI 미설치/미인증/타임아웃/파싱 실패 시 null을 반환한다(→ 저하 동작).
  */
-export async function analyzeImages(listing: DomesticListing): Promise<ProductIdentity | null> {
+export async function analyzeImagesViaCli(listing: DomesticListing): Promise<ProductIdentity | null> {
+  if (!isClaudeCliEnabled()) return null;
   const downloaded = await downloadImages(listing.images);
   if (!downloaded) return null;
   try {
-    const text = await runClaude(IDENTITY_PROMPT(downloaded.paths, listing));
+    const text = await runClaude(identityPromptWithPaths(downloaded.paths, listing));
     const json = extractJson(text);
-    if (!json) return null;
-    const identity = coerceIdentity(json);
-    return identity.name ? identity : null;
+    return json ? coerceIdentity(json) : null;
   } catch {
     return null;
   } finally {
@@ -128,32 +94,13 @@ export async function analyzeImages(listing: DomesticListing): Promise<ProductId
   }
 }
 
-const QUERY_PROMPT = (
-  identity: ProductIdentity,
-) => `You generate overseas marketplace search queries for reselling a Korean second-hand item abroad.
-
-Identified product:
-${JSON.stringify(identity)}
-
-Produce concise search queries (English or original language, as buyers would search) for each source. Include region/edition keywords when relevant.
-
-Respond with ONLY a JSON object:
-{"ebay":string[],"mercari":string[],"yahoo-auction":string[],"pricecharting":string[]}`;
-
-/**
- * Claude CLI로 소스별 해외 검색어를 생성한다. 실패 시 null(→ 저하 동작).
- */
-export async function generateSearchQueries(identity: ProductIdentity): Promise<SearchQueries | null> {
+/** Claude CLI로 소스별 해외 검색어를 생성한다. 실패 시 null(→ 저하 동작). */
+export async function generateSearchQueriesViaCli(identity: ProductIdentity): Promise<SearchQueries | null> {
+  if (!isClaudeCliEnabled()) return null;
   try {
-    const text = await runClaude(QUERY_PROMPT(identity));
+    const text = await runClaude(queryInstruction(identity));
     const json = extractJson(text);
-    if (!json) return null;
-    const out: SearchQueries = {};
-    for (const [k, v] of Object.entries(json)) {
-      const arr = strArray(v);
-      if (arr.length > 0) out[k] = arr;
-    }
-    return Object.keys(out).length > 0 ? out : null;
+    return json ? coerceQueries(json) : null;
   } catch {
     return null;
   }
