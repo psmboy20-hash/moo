@@ -17,6 +17,24 @@ export async function fetchHtml(url: string, timeoutMs = 12_000): Promise<string
   return res.text();
 }
 
+/**
+ * 단축/추적 URL의 최종 목적지를 해석한다. 리다이렉트를 따라간 뒤 최종 URL을 반환하고,
+ * 실패 시 원본 URL을 그대로 반환한다(저하 동작).
+ */
+export async function resolveFinalUrl(url: string, timeoutMs = 10_000): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      headers: { "User-Agent": DESKTOP_UA, "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8" },
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.url || url;
+  } catch {
+    return url;
+  }
+}
+
 /** JSON API 호출. 실패 시 throw. */
 export async function fetchJson<T = unknown>(url: string, timeoutMs = 12_000): Promise<T> {
   const res = await fetch(url, {
