@@ -1,5 +1,7 @@
 import type { Browser } from "playwright";
 
+import { withTtlCache } from "@/lib/sources/cache";
+
 const DESKTOP_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36";
 
@@ -114,11 +116,14 @@ export async function withRenderedHtml<T>(
 
 const JINA_PREFIX = "https://r.jina.ai/";
 const JINA_TIMEOUT_MS = 24_000;
+/** 성공 응답 캐시 TTL. 분석→저장→수동 새로고침 주기 내 중복 프록시 호출을 흡수. */
+const JINA_CACHE_TTL_MS = 5 * 60_000;
 
 /**
  * r.jina.ai 리더 프록시로 페이지를 가져온다. 직접 fetch가 차단되는 사이트
  * (eBay/Yahoo Auction 등)의 우회 경로. 무료 티어는 레이트리밋/순간 빈응답이 잦아
  * 3회까지 백오프 재시도하고, 짧은 응답(<300자)은 실패로 간주한다.
+ * 성공 응답은 짧게 캐싱해 레이트리밋 압박을 줄인다(실패는 캐싱하지 않음).
  *
  * @param format "markdown"(기본) 또는 "html"(원본 HTML → cheerio 파서 재사용 가능)
  */
@@ -126,6 +131,10 @@ export async function fetchViaJina(
   url: string,
   { format = "markdown", tries = 3 }: { format?: "markdown" | "html"; tries?: number } = {},
 ): Promise<string> {
+  return withTtlCache(`jina|${format}|${url}`, JINA_CACHE_TTL_MS, () => fetchViaJinaUncached(url, format, tries));
+}
+
+async function fetchViaJinaUncached(url: string, format: "markdown" | "html", tries: number): Promise<string> {
   const headers: Record<string, string> = {
     "User-Agent": DESKTOP_UA,
     "Accept-Language": "ja,en;q=0.9,ko;q=0.8",
