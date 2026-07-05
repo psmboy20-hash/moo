@@ -62,7 +62,7 @@ export function SoldPriceCard({ result }: { result: AnalysisResult }) {
         <Separator />
 
         <div>
-          <p className="text-muted-foreground mb-1.5 text-xs">전체 (보수/기준/공격)</p>
+          <p className="mb-1.5 text-muted-foreground text-xs">전체 (보수/기준/공격)</p>
           <div className="grid grid-cols-3 gap-2">
             <Stat label="보수 시세" value={won(stats.conservative)} hint="확실히 팔림" />
             <Stat label="기준 시세" value={won(stats.base)} hint="실질 시장가" />
@@ -87,7 +87,7 @@ export function SoldPriceCard({ result }: { result: AnalysisResult }) {
                 >
                   <span className={isTarget ? "text-foreground" : "text-muted-foreground"}>
                     {TIER_LABEL[t]}
-                    {isTarget && " ★"} <span className="text-muted-foreground text-[10px]">({ts.sampleN})</span>
+                    {isTarget && " ★"} <span className="text-[10px] text-muted-foreground">({ts.sampleN})</span>
                   </span>
                   <span className="tabular-nums">
                     {won(ts.conservative)} ~ {won(ts.aggressive)}

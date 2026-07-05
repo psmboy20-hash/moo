@@ -1,9 +1,11 @@
 import { Analyzer } from "@/components/analyzer";
+import { SiteNav } from "@/components/site-nav";
 import { APP_CONFIG } from "@/config/app-config";
 
 export default function Home() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-4 py-10 sm:py-16">
+      <SiteNav />
       <header className="mb-8 space-y-2">
         <h1 className="font-bold text-2xl tracking-tight sm:text-3xl">{APP_CONFIG.name}</h1>
         <p className="text-muted-foreground text-sm sm:text-base">

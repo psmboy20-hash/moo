@@ -74,7 +74,7 @@ export function ConclusionCard({ result }: { result: AnalysisResult }) {
 
         {markets.length > 1 && (
           <div className="space-y-1.5">
-            <p className="text-muted-foreground text-xs font-medium">시장별 예상 순이익</p>
+            <p className="font-medium text-muted-foreground text-xs">시장별 예상 순이익</p>
             <div className="space-y-1">
               {markets.map((m) => (
                 <div key={m.market} className="flex items-center justify-between text-sm">

@@ -79,6 +79,44 @@ export function Analyzer() {
     void run({ manual: listing });
   }
 
+  const [saving, setSaving] = useState(false);
+  async function saveResult() {
+    if (!result) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/analyses", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ result }),
+      });
+      const data = await res.json();
+      if (data.ok) toast.success("분석을 저장했습니다.");
+      else if (data.disabled) toast.info("저장 기능이 꺼져 있습니다(관리자: SUPABASE 키 등록 필요).");
+      else toast.error(data.error ?? "저장 실패");
+    } catch {
+      toast.error("저장 중 오류가 발생했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function addToWatchlist() {
+    if (!result) return;
+    try {
+      const res = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: result.identity.name || result.listing.title, url: result.listing.url }),
+      });
+      const data = await res.json();
+      if (data.ok) toast.success("관심목록에 담았습니다.");
+      else if (data.disabled) toast.info("관심목록 기능이 꺼져 있습니다(관리자: SUPABASE 키 등록 필요).");
+      else toast.error(data.error ?? "추가 실패");
+    } catch {
+      toast.error("추가 중 오류가 발생했습니다.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <Card>
@@ -134,7 +172,19 @@ export function Analyzer() {
       )}
 
       {status === "loading" && <LoadingSkeleton />}
-      {status === "done" && result && <Results result={result} />}
+      {status === "done" && result && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" disabled={saving} onClick={() => void saveResult()}>
+              {saving ? "저장 중…" : "분석 저장"}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => void addToWatchlist()}>
+              관심목록 담기
+            </Button>
+          </div>
+          <Results result={result} />
+        </div>
+      )}
     </div>
   );
 }
