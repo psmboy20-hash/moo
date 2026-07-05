@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_FEES } from "@/lib/config/fees";
 import { verifyMatch } from "@/lib/pipeline/filter";
-import { mean, median, quantile, removeOutliersIQR } from "@/lib/pipeline/outliers";
+import { mean, median, quantile, removeLowNoise, removeOutliersIQR } from "@/lib/pipeline/outliers";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
 import { breakEvenBuyPrice, computeProfit, maxBuyForTargets } from "@/lib/pipeline/profit";
 import { suggestPrices } from "@/lib/pipeline/suggest";
@@ -61,6 +61,17 @@ describe("outliers", () => {
 
   it("keeps data when n<4", () => {
     expect(removeOutliersIQR([100, 5000])).toEqual([100, 5000]);
+  });
+
+  it("removeLowNoise drops ~1엔 junk but keeps legit loose prices", () => {
+    // 중앙값 ~15000: 9(1엔 낙찰 노이즈)는 제거, 1178(loose 정상가)는 유지
+    const out = removeLowNoise([9, 1178, 9200, 15198, 15000, 16000, 253000]);
+    expect(out).not.toContain(9);
+    expect(out).toContain(1178);
+  });
+
+  it("removeLowNoise keeps data when n<4", () => {
+    expect(removeLowNoise([1, 100000])).toEqual([1, 100000]);
   });
 });
 

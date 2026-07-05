@@ -1,4 +1,4 @@
-import { mean, quantile, removeOutliersIQR } from "@/lib/pipeline/outliers";
+import { mean, quantile, removeLowNoise, removeOutliersIQR } from "@/lib/pipeline/outliers";
 import type { ActiveListing, ActiveStats, SoldListing, SoldSourceId, SoldStats } from "@/lib/types";
 
 /**
@@ -11,7 +11,9 @@ import type { ActiveListing, ActiveStats, SoldListing, SoldSourceId, SoldStats }
 export function computeSoldStats(listings: SoldListing[]): SoldStats {
   const matched = listings.filter((l) => l.matched);
   const rawPrices = matched.map((l) => l.priceKRW);
-  const cleaned = removeOutliersIQR(rawPrices);
+  // 1) 극단적 저가 노이즈 제거(야후 1엔 낙찰 등) → 2) IQR 이상치 제거
+  const denoised = removeLowNoise(rawPrices);
+  const cleaned = removeOutliersIQR(denoised);
   const sorted = [...cleaned].sort((a, b) => a - b);
 
   const bySource: Partial<Record<SoldSourceId, number>> = {};

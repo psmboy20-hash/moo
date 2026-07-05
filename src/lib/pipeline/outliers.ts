@@ -46,3 +46,21 @@ export function removeOutliersIQR(values: number[], k = 1.5): number[] {
   // 모두 걸러지는 극단 상황 방지
   return filtered.length > 0 ? filtered : sorted;
 }
+
+/**
+ * 중앙값 대비 극단적으로 낮은 노이즈를 제거한다 (순수 함수).
+ * 야후옥션 "1円 시작 → 낙찰 1엔" 정크 매물처럼 실제 시세가 아닌 값이
+ * 보수 시세를 왜곡하는 것을 막는다. 정상적인 저가(예: 소프트only/loose)는
+ * 남기도록 비율을 낮게(기본 5%) 잡는다.
+ *
+ * @param minRatioOfMedian 중앙값 대비 이 비율 미만이면 제거 (기본 0.05)
+ */
+export function removeLowNoise(values: number[], minRatioOfMedian = 0.05): number[] {
+  const clean = values.filter((v) => Number.isFinite(v) && v > 0);
+  if (clean.length < 4) return clean;
+  const med = median(clean);
+  if (med <= 0) return clean;
+  const floor = med * minRatioOfMedian;
+  const kept = clean.filter((v) => v >= floor);
+  return kept.length > 0 ? kept : clean;
+}
