@@ -20,3 +20,9 @@ services:
         sync: false
       - key: JINA_API_KEY # 봇 차단 우회 프록시 레이트리밋 완화 (선택)
         sync: false
+      # 저장·관심목록·매입/판매 기록 대시보드 (선택). 둘 다 넣어야 켜진다.
+      # 먼저 Supabase 프로젝트 생성 + supabase/schema.sql 실행. SERVICE_ROLE_KEY는 서버 전용.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false

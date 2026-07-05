@@ -59,15 +59,35 @@ npx tsx scripts/smoke.ts "<국내상품링크>"
 
 > **영향도 순**: `ANTHROPIC_API_KEY`(식별 정확도) > `JINA_API_KEY`(시세 수집 안정성) > `EBAY_*`(eBay 데이터) > `SUPABASE_*`(저장).
 
-## Vercel 배포 설정
+## 배포
+
+배포 경로는 두 가지다. **컨테이너(Railway/Render)** 는 Playwright(Mercari/Yahoo 렌더링)까지 돌아가고
+미리보기 SSO 벽이 없어 실사용에 유리하다. **Vercel**은 설정이 가장 간단하지만 서버리스라 Playwright가 없다.
+
+### 컨테이너 배포 — Railway / Render (권장)
+
+저장소에 `Dockerfile`(Chromium 포함)과 `render.yaml`(Render Blueprint)이 있다.
+
+- **Render**: 대시보드 → **New → Blueprint** → 이 저장소 연결 → `render.yaml` 그대로 서비스 생성.
+  이후 Environment 탭에서 표의 키 값을 입력(모두 `sync: false`라 코드에 노출되지 않음).
+  `render.yaml`의 `plan: free`(512MB)는 Chromium에 빠듯 → 수집이 자주 비면 `starter`(2GB)로 상향.
+- **Railway**: **New Project → Deploy from Repo** → Dockerfile 자동 감지 → Variables에 키 입력.
+  포트는 주입되는 `PORT`를 `next start`가 자동으로 따른다.
+- Dockerfile은 `playwright install --with-deps chromium`으로 브라우저와 시스템 라이브러리를 함께 설치한다.
+
+### Vercel 배포
 
 1. **환경 변수 등록** — Vercel 프로젝트 → Settings → Environment Variables 에 위 표의 값을 추가.
    `SUPABASE_SERVICE_ROLE_KEY`는 **서버 전용**이므로 클라이언트(NEXT_PUBLIC_)로 노출 금지.
-2. **Supabase 대시보드를 쓰려면** — supabase.com에서 프로젝트 생성 → SQL Editor에서 `supabase/schema.sql` 실행 →
-   `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 등록.
-3. **미리보기 접근** — 프리뷰 배포에 Vercel Authentication(SSO)이 켜져 있으면 로그인 없이는 열리지 않는다.
+2. **미리보기 접근** — 프리뷰 배포에 Vercel Authentication(SSO)이 켜져 있으면 로그인 없이는 열리지 않는다.
    직접 테스트하려면 Settings → Deployment Protection에서 보호를 조정하거나 프로덕션 도메인을 사용.
-4. 환경 변수 변경 후에는 **재배포**해야 반영된다.
+3. 서버리스라 **Playwright(Mercari/Yahoo 렌더링 소스)는 동작하지 않는다.** PriceCharting·Yahoo(jina)·eBay(키)로 동작.
+
+### 공통 — Supabase 대시보드 활성화
+
+저장·관심목록·기록 기능을 쓰려면 배포처와 무관하게: supabase.com에서 프로젝트 생성 →
+SQL Editor에서 `supabase/schema.sql` 실행 → `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` 등록 → 재배포.
+값이 없으면 대시보드는 "꺼짐"으로 안내되고 분석기는 그대로 동작한다.
 
 ## 데이터 소스 현실 (알아둘 제약)
 
