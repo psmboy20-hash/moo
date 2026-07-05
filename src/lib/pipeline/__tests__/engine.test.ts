@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_FEES } from "@/lib/config/fees";
+import { estimateShippingKRW, estimateWeightGrams } from "@/lib/config/shipping";
 import { verifyMatch } from "@/lib/pipeline/filter";
+import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { mean, median, quantile, removeLowNoise, removeOutliersIQR } from "@/lib/pipeline/outliers";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
 import { breakEvenBuyPrice, computeProfit, maxBuyForTargets } from "@/lib/pipeline/profit";
@@ -72,6 +74,75 @@ describe("outliers", () => {
 
   it("removeLowNoise keeps data when n<4", () => {
     expect(removeLowNoise([1, 100000])).toEqual([1, 100000]);
+  });
+});
+
+describe("shipping (weight-based)", () => {
+  it("estimateWeightGrams: category + AI override", () => {
+    expect(estimateWeightGrams("game-cart")).toBe(120);
+    expect(estimateWeightGrams("console")).toBe(2500);
+    expect(estimateWeightGrams(undefined)).toBe(400); // default
+    expect(estimateWeightGrams("game-cart", 90)).toBe(90); // AI override wins
+  });
+
+  it("estimateShippingKRW: heavier costs more, JP cheaper than US at same tier", () => {
+    expect(estimateShippingKRW("ebay-us", 90)).toBeLessThan(estimateShippingKRW("ebay-us", 2500));
+    expect(estimateShippingKRW("mercari-jp", 300)).toBeLessThan(estimateShippingKRW("ebay-us", 300));
+  });
+});
+
+describe("multi-market profit", () => {
+  const sold = (source: SoldListing["source"], krw: number): SoldListing => ({
+    source,
+    title: "x",
+    priceOriginal: krw,
+    currency: "KRW",
+    priceKRW: krw,
+    url: "#",
+    matched: true,
+  });
+
+  it("computes per-market profit sorted desc, bestMarket first", () => {
+    const listings = [
+      sold("ebay", 200_000),
+      sold("ebay", 210_000),
+      sold("mercari", 150_000),
+      sold("yahoo-auction", 140_000),
+    ];
+    const markets = computeMarketProfits(listings, 45_000, 300);
+    expect(markets.length).toBe(3);
+    // 내림차순 정렬
+    for (let i = 1; i < markets.length; i++) {
+      expect(markets[i - 1].profit.netProfit).toBeGreaterThanOrEqual(markets[i].profit.netProfit);
+    }
+    // eBay 표본가가 가장 높아 최적일 가능성 높음 (수수료 반영 후에도)
+    expect(markets[0].profit.netProfit).toBeGreaterThan(0);
+  });
+
+  it("returns empty when no matched sold", () => {
+    expect(computeMarketProfits([], 45_000, 300)).toEqual([]);
+  });
+
+  it("computeSellThrough ratio", () => {
+    const s = computeSellThrough(
+      [sold("ebay", 100), sold("ebay", 100), sold("ebay", 100)],
+      [
+        {
+          source: "ebay",
+          title: "x",
+          priceOriginal: 1,
+          currency: "KRW",
+          priceKRW: 1,
+          shippingKRW: 0,
+          buyerPerceivedKRW: 1,
+          url: "#",
+          matched: true,
+        },
+      ],
+    );
+    expect(s.soldCount).toBe(3);
+    expect(s.activeCount).toBe(1);
+    expect(s.ratio).toBe(0.75);
   });
 });
 

@@ -41,6 +41,51 @@ export const MERCARI_FEES: FeeConfig = {
 };
 
 /* ------------------------------------------------------------------ */
+/* 시장별 수수료·통화 (멀티마켓 순이익)                                  */
+/* ------------------------------------------------------------------ */
+
+import { estimateShippingKRW } from "@/lib/config/shipping";
+import type { Currency, MarketId } from "@/lib/types";
+
+export const MARKET_LABEL: Record<MarketId, string> = {
+  "ebay-us": "eBay (US)",
+  "mercari-jp": "Mercari (JP)",
+  "yahoo-jp": "Yahoo Auction (JP)",
+};
+
+interface MarketFeeSpec {
+  currency: Currency;
+  sellingFeeRate: number;
+  paymentFeeRate: number;
+  fxRiskRate: number;
+  claimRiskRate: number;
+}
+
+/** 시장별 수수료율(판매가 대비)·정산 통화. 배송비는 무게로 별도 산정. */
+export const MARKET_FEES: Record<MarketId, MarketFeeSpec> = {
+  // eBay: final value fee ~13% + 결제/정산 ~3%, USD 정산(환전 리스크 큼)
+  "ebay-us": { currency: "USD", sellingFeeRate: 0.13, paymentFeeRate: 0.03, fxRiskRate: 0.02, claimRiskRate: 0.03 },
+  // Mercari JP: 판매 수수료 10%(결제 포함), JPY 정산
+  "mercari-jp": { currency: "JPY", sellingFeeRate: 0.1, paymentFeeRate: 0.0, fxRiskRate: 0.02, claimRiskRate: 0.03 },
+  // Yahoo Auction JP: 시스템 이용료 ~10%, JPY 정산
+  "yahoo-jp": { currency: "JPY", sellingFeeRate: 0.1, paymentFeeRate: 0.0, fxRiskRate: 0.02, claimRiskRate: 0.03 },
+};
+
+/** 시장·무게로 완전한 FeeConfig 구성 (배송비=무게 테이블, 포장·국내배송=공통 상수) */
+export function feesForMarket(market: MarketId, weightGrams: number): FeeConfig {
+  const m = MARKET_FEES[market];
+  return {
+    sellingFeeRate: m.sellingFeeRate,
+    paymentFeeRate: m.paymentFeeRate,
+    intlShipping: estimateShippingKRW(market, weightGrams),
+    packing: DEFAULT_FEES.packing,
+    domesticShipping: DEFAULT_FEES.domesticShipping,
+    fxRiskRate: m.fxRiskRate,
+    claimRiskRate: m.claimRiskRate,
+  };
+}
+
+/* ------------------------------------------------------------------ */
 /* 판정 임계값                                                          */
 /* ------------------------------------------------------------------ */
 

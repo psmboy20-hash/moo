@@ -3,6 +3,7 @@ import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { MARKET_LABEL } from "@/lib/config/fees";
 import { pct, won } from "@/lib/format";
 import type { AnalysisResult, VerdictStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,7 @@ function Metric({ label, value, accent }: { label: string; value: string; accent
 
 export function ConclusionCard({ result }: { result: AnalysisResult }) {
   const meta = VERDICT_META[result.verdict.status];
-  const { profit, decision, suggestion, listing } = result;
+  const { profit, decision, listing, markets, bestMarket, sellThrough } = result;
   const profitPositive = profit.netProfit >= 0;
 
   return (
@@ -51,19 +52,46 @@ export function ConclusionCard({ result }: { result: AnalysisResult }) {
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-lg">결론</CardTitle>
-          <Badge className={cn("px-3 py-1 text-sm", meta.className)}>{meta.label}</Badge>
+          <div className="flex items-center gap-2">
+            {bestMarket && <Badge variant="outline">최적 판매처: {MARKET_LABEL[bestMarket]}</Badge>}
+            <Badge className={cn("px-3 py-1 text-sm", meta.className)}>{meta.label}</Badge>
+          </div>
         </div>
         <CardDescription>{meta.desc}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <Metric label="국내 판매가" value={won(listing.priceKRW)} />
-          <Metric label="추천 해외 판매가" value={won(suggestion.finalRecommended)} />
+          <Metric label="추천 해외 판매가" value={won(profit.expectedSalePriceKRW)} />
           <Metric label="예상 순이익" value={won(profit.netProfit)} accent={profitPositive ? "pos" : "neg"} />
           <Metric label="예상 수익률" value={pct(profit.marginPct)} accent={profitPositive ? "pos" : "neg"} />
           <Metric label="추천 최대 매입가" value={won(decision.recommendedMaxBuyPrice)} />
-          <Metric label="판매 난이도" value={DIFFICULTY_LABEL[decision.sellDifficulty]} />
+          <Metric
+            label="판매 난이도"
+            value={`${DIFFICULTY_LABEL[decision.sellDifficulty]}${sellThrough.estTurnoverDays ? ` · ~${sellThrough.estTurnoverDays}일` : ""}`}
+          />
         </div>
+
+        {markets.length > 1 && (
+          <div className="space-y-1.5">
+            <p className="text-muted-foreground text-xs font-medium">시장별 예상 순이익</p>
+            <div className="space-y-1">
+              {markets.map((m) => (
+                <div key={m.market} className="flex items-center justify-between text-sm">
+                  <span
+                    className={cn("text-muted-foreground", m.market === bestMarket && "font-semibold text-foreground")}
+                  >
+                    {MARKET_LABEL[m.market]}
+                    {m.market === bestMarket && " ★"}
+                  </span>
+                  <span className={cn("tabular-nums", m.profit.netProfit >= 0 ? "text-success" : "text-destructive")}>
+                    {won(m.profit.netProfit)} ({pct(m.profit.marginPct)})
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {result.verdict.riskFlags.length > 0 && (
           <>

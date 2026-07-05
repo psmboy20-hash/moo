@@ -1,8 +1,10 @@
 import { analyzeImages, generateSearchQueries } from "@/lib/ai";
 import { fallbackIdentity, fallbackQueries } from "@/lib/ai/fallback";
-import { DEFAULT_FEES } from "@/lib/config/fees";
+import { DEFAULT_FEES, feesForMarket } from "@/lib/config/fees";
 import { getRates } from "@/lib/config/fx";
+import { estimateWeightGrams } from "@/lib/config/shipping";
 import { markMatches } from "@/lib/pipeline/filter";
+import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
 import { computeProfit } from "@/lib/pipeline/profit";
 import { suggestPrices } from "@/lib/pipeline/suggest";
@@ -101,13 +103,22 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
   // 13) 판매가 제안
   const suggestion = suggestPrices(soldStats, activeStats, identity, difficulty);
 
+  // 시장별 순이익 + 최적 판매처 + 회전성 + 무게
+  const weightGrams = estimateWeightGrams(identity.categoryKey, identity.weightGramsEst);
+  const markets = computeMarketProfits(sold, listing.priceKRW, weightGrams);
+  const bestMarket = markets[0]?.market ?? null;
+  const sellThrough = computeSellThrough(sold, active);
+
   // 14~15) 수수료·배송·환율·리스크 반영 순이익/수익률
-  const expectedSale = suggestion.finalRecommended;
-  const profit = computeProfit(expectedSale, listing.priceKRW, DEFAULT_FEES);
+  // 최적 판매처가 있으면 그 시장 기준을, 없으면(시세 없음) 제안가+기본수수료로 판정.
+  const best = markets[0];
+  const headlineFees = bestMarket ? feesForMarket(bestMarket, weightGrams) : DEFAULT_FEES;
+  const expectedSale = best ? best.expectedSalePriceKRW : suggestion.finalRecommended;
+  const profit = best ? best.profit : computeProfit(expectedSale, listing.priceKRW, DEFAULT_FEES);
 
   // 16~17) 매입 판단 + 최종 판정
   const verdict = buildVerdict(profit, identity, soldStats, difficulty);
-  const decision = buildBuyDecision(listing.priceKRW, expectedSale, profit, verdict, difficulty, DEFAULT_FEES);
+  const decision = buildBuyDecision(listing.priceKRW, expectedSale, profit, verdict, difficulty, headlineFees);
 
   return {
     listing,
@@ -119,6 +130,10 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
     profit,
     decision,
     verdict,
+    markets,
+    bestMarket,
+    sellThrough,
+    weightGrams,
     degraded,
     notes,
   };

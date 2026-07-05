@@ -40,6 +40,11 @@ export function coerceIdentity(json: Record<string, unknown>): ProductIdentity |
     regionCode: str(json.regionCode),
     accuracy: Number.isFinite(acc) ? Math.max(0, Math.min(100, acc)) : 50,
     missingPhotos: strArray(json.missingPhotos),
+    categoryKey: typeof json.categoryKey === "string" ? json.categoryKey : undefined,
+    weightGramsEst:
+      typeof json.weightGramsEst === "number" && Number.isFinite(json.weightGramsEst) && json.weightGramsEst > 0
+        ? json.weightGramsEst
+        : undefined,
   };
 }
 
@@ -54,7 +59,7 @@ export function coerceQueries(json: Record<string, unknown>): SearchQueries | nu
 }
 
 export const IDENTITY_JSON_SHAPE =
-  '{"name":string,"platform":string,"region":string,"version":string,"condition":string,"sealed":boolean|null,"boxState":string,"components":string[],"coverDesign":string,"regionCode":string,"accuracy":number(0-100),"missingPhotos":string[]}';
+  '{"name":string,"platform":string,"region":string,"version":string,"condition":string,"sealed":boolean|null,"boxState":string,"components":string[],"coverDesign":string,"regionCode":string,"accuracy":number(0-100),"missingPhotos":string[],"categoryKey":one of ["game-cart","game-boxed","game-big-box","console","console-boxed","card","card-box","figure","figure-large","disc","book","default"],"weightGramsEst":number(estimated shipping weight in grams incl. packaging)}';
 
 /** 이미지 분석 지시문 (이미지는 별도로 첨부/참조됨). 판매자 제목·설명은 힌트로만. */
 export function identityInstruction(listing: DomesticListing): string {

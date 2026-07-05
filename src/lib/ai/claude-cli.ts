@@ -72,8 +72,10 @@ Seller description (hint only): ${listing.description?.slice(0, 500) ?? ""}
 
 Analyze: product name (prefer the international/original-language name used on eBay/Mercari), platform/category, region edition (일본판/북미판/아시아판/유럽판), version/edition, condition, whether factory-sealed, box state, included components, cover/artwork design, region code (CERO/ESRB/PEGI/barcode country), and which additional photos are needed to be sure.
 
+Also estimate categoryKey (one of ["game-cart","game-boxed","game-big-box","console","console-boxed","card","card-box","figure","figure-large","disc","book","default"]) and weightGramsEst (shipping weight in grams incl. packaging).
+
 Respond with ONLY a JSON object, no prose, matching exactly:
-{"name":string,"platform":string,"region":string,"version":string,"condition":string,"sealed":boolean|null,"boxState":string,"components":string[],"coverDesign":string,"regionCode":string,"accuracy":number(0-100),"missingPhotos":string[]}`;
+{"name":string,"platform":string,"region":string,"version":string,"condition":string,"sealed":boolean|null,"boxState":string,"components":string[],"coverDesign":string,"regionCode":string,"accuracy":number(0-100),"missingPhotos":string[],"categoryKey":string,"weightGramsEst":number}`;
 
 /**
  * Claude CLI로 상품 이미지를 분석해 제품을 식별한다.

@@ -18,6 +18,22 @@ export type ActiveSourceId = (typeof ACTIVE_SOURCES)[number];
 
 export type Currency = "USD" | "JPY" | "KRW";
 
+/** 판매 대상 해외 시장 (멀티마켓 순이익 계산 단위) */
+export const MARKETS = ["ebay-us", "mercari-jp", "yahoo-jp"] as const;
+export type MarketId = (typeof MARKETS)[number];
+
+/** 시세 소스 → 판매 시장 매핑 (PriceCharting은 USD 기준가라 eBay US에 귀속) */
+export function marketOfSource(source: SoldSourceId | ActiveSourceId): MarketId {
+  switch (source) {
+    case "mercari":
+      return "mercari-jp";
+    case "yahoo-auction":
+      return "yahoo-jp";
+    default:
+      return "ebay-us"; // ebay, pricecharting, overseas-mall
+  }
+}
+
 /** 최종 매입 판정 */
 export type VerdictStatus = "RECOMMEND" | "CONDITIONAL" | "HOLD" | "AVOID";
 
@@ -89,6 +105,10 @@ export interface ProductIdentity {
   accuracy: number;
   /** 추가 확인이 필요한 사진 항목 */
   missingPhotos: string[];
+  /** 배송비 추정용 카테고리 키 (shipping.CATEGORY_WEIGHT_G 참조) */
+  categoryKey?: string;
+  /** AI가 추정한 무게(g) — 없으면 categoryKey로 폴백 */
+  weightGramsEst?: number;
 }
 
 /** 소스별 해외 검색어 */
@@ -184,6 +204,26 @@ export interface ProfitBreakdown {
   marginPct: number;
 }
 
+/** 시장별 순이익 (멀티마켓 비교용) */
+export interface MarketProfit {
+  market: MarketId;
+  /** 이 시장의 판매완료 기준 예상 판매가 (KRW) */
+  expectedSalePriceKRW: number;
+  /** 이 시장 매칭 판매완료 표본 수 */
+  sampleN: number;
+  profit: ProfitBreakdown;
+}
+
+/** 판매 회전성(sell-through) */
+export interface SellThrough {
+  soldCount: number;
+  activeCount: number;
+  /** soldCount / (soldCount + activeCount) — 높을수록 잘 팔림 */
+  ratio: number;
+  /** 예상 회전 기간(일) — 추정, 데이터 부족 시 null */
+  estTurnoverDays: number | null;
+}
+
 /** 매입 판단 */
 export interface BuyDecision {
   currentDomesticPrice: number;
@@ -227,6 +267,13 @@ export interface AnalysisResult {
   profit: ProfitBreakdown;
   decision: BuyDecision;
   verdict: Verdict;
+  /** 시장별 순이익 비교 (내림차순) + 최적 판매처 */
+  markets: MarketProfit[];
+  bestMarket: MarketId | null;
+  /** 판매 회전성 */
+  sellThrough: SellThrough;
+  /** 추정 무게(g) */
+  weightGrams: number;
   /** AI 분석이 저하 모드(제목 기반)로 동작했는지 */
   degraded: boolean;
   /** 진단/경고 메시지 */
