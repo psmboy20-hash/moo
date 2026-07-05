@@ -29,6 +29,7 @@ export function coerceIdentity(json: Record<string, unknown>): ProductIdentity |
   if (!name) return null;
   return {
     name,
+    aliases: strArray(json.aliases),
     platform: str(json.platform),
     region: str(json.region),
     version: str(json.version),
@@ -59,7 +60,7 @@ export function coerceQueries(json: Record<string, unknown>): SearchQueries | nu
 }
 
 export const IDENTITY_JSON_SHAPE =
-  '{"name":string,"platform":string,"region":string,"version":string,"condition":string,"sealed":boolean|null,"boxState":string,"components":string[],"coverDesign":string,"regionCode":string,"accuracy":number(0-100),"missingPhotos":string[],"categoryKey":one of ["game-cart","game-boxed","game-big-box","console","console-boxed","card","card-box","figure","figure-large","disc","book","default"],"weightGramsEst":number(estimated shipping weight in grams incl. packaging)}';
+  '{"name":string,"aliases":string[],"platform":string,"region":string,"version":string,"condition":string,"sealed":boolean|null,"boxState":string,"components":string[],"coverDesign":string,"regionCode":string,"accuracy":number(0-100),"missingPhotos":string[],"categoryKey":one of ["game-cart","game-boxed","game-big-box","console","console-boxed","card","card-box","figure","figure-large","disc","book","default"],"weightGramsEst":number(estimated shipping weight in grams incl. packaging)}';
 
 /** 이미지 분석 지시문 (이미지는 별도로 첨부/참조됨). 판매자 제목·설명은 힌트로만. */
 export function identityInstruction(listing: DomesticListing): string {
@@ -73,6 +74,8 @@ Numbers in the seller's title may be the seller's own catalog numbers — IGNORE
 If you cannot read the individual subtitle from the images, lower the accuracy score.
 
 Analyze: product name (prefer the international/original-language name used on eBay/Mercari, including the individual subtitle), platform/category, region edition (일본판/북미판/아시아판/유럽판), version/edition, condition, whether factory-sealed, box state, included components, cover/artwork design, region code (CERO/ESRB/PEGI/barcode country), and which additional photos are needed to be sure.
+
+CRITICAL for price matching — "aliases": provide the SAME product's title in the languages of the overseas marketplaces, so listings in different languages can be matched. Include: the exact Japanese title (日本語, for Yahoo Auction/Mercari — e.g. "ロックマンエグゼ4 トーナメント ブルームーン"), the romanized/English title (for eBay), and any common variant spelling. Give the full individual title (with subtitle), not just the series. Omit only if genuinely unknown.
 
 Respond with ONLY a JSON object, no prose, matching exactly:
 ${IDENTITY_JSON_SHAPE}`;

@@ -113,6 +113,11 @@ export interface DomesticListing {
 export interface ProductIdentity {
   /** 추정 제품명 (해외 검색용 영문/원어 우선) */
   name: string;
+  /**
+   * 같은 제품의 다른 언어 표기(일본어·로마자·영문 개별 부제 포함).
+   * 시장별 제목 언어가 달라(예: Yahoo는 일본어) name과 안 겹치는 문제를 매칭에서 보완한다.
+   */
+  aliases?: string[];
   /** 게임/음반/피규어 등 플랫폼·카테고리 (예: "Nintendo Switch", "PS5", "Vinyl") */
   platform: string;
   /** 지역판 (예: "일본판", "북미판", "아시아판", "유럽판") */

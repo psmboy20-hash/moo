@@ -334,6 +334,31 @@ describe("same-product filter", () => {
     const r = verifyMatch("Zelda Tears of the Kingdom Switch USA ESRB North America", identity);
     expect(r.matched).toBe(false);
   });
+
+  it("matches a Japanese-title listing via a Japanese alias (cross-language)", () => {
+    const jp: ProductIdentity = {
+      ...identity,
+      name: "Mega Man Battle Network 4 Blue Moon",
+      region: "일본판",
+      regionCode: "CERO",
+      aliases: ["ロックマンエグゼ4 トーナメント ブルームーン", "Rockman EXE 4"],
+    };
+    // 영문 name과는 전혀 안 겹치지만 일본어 별칭이 제목에 통째로 포함됨
+    const title = "ロックマンエグゼ4 トーナメント ブルームーン GBA 動作確認済";
+    expect(verifyMatch(title, jp).matched).toBe(true);
+  });
+
+  it("still rejects a different Japanese product despite same series alias", () => {
+    const jp: ProductIdentity = {
+      ...identity,
+      name: "Mega Man Battle Network 4 Blue Moon",
+      region: "미상",
+      regionCode: "미상",
+      aliases: ["ロックマンエグゼ4 トーナメント ブルームーン"],
+    };
+    // 다른 부제(레드선) → 별칭 문자열이 통째로 포함되지 않음
+    expect(verifyMatch("ロックマンエグゼ4.5 リアルオペレーション", jp).matched).toBe(false);
+  });
 });
 
 describe("price suggestion", () => {
