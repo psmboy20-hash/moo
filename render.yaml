@@ -1,0 +1,22 @@
+# Render Blueprint — 대시보드에서 "New → Blueprint"로 이 저장소를 연결하면
+# 이 파일 그대로 서비스가 생성된다. https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: moo
+    runtime: docker
+    # 배포할 브랜치. main에 머지한 뒤에는 이 줄을 지우면 기본 브랜치를 따라간다.
+    branch: claude/repo-overview-3p417x
+    # free 플랜(512MB)은 Chromium 렌더링 시 메모리가 빠듯할 수 있다.
+    # 매물 수집이 자주 빈 결과로 떨어지면 starter(2GB)로 올릴 것.
+    plan: free
+    healthCheckPath: /
+    envVars:
+      # 값은 Render 대시보드에서 직접 입력 (sync: false = 코드에 노출 안 함)
+      - key: ANTHROPIC_API_KEY # 이미지 제품 식별 (권장)
+        sync: false
+      - key: EBAY_APP_ID # eBay Browse API + 이미지 검색 (선택)
+        sync: false
+      - key: EBAY_CERT_ID
+        sync: false
+      - key: JINA_API_KEY # 봇 차단 우회 프록시 레이트리밋 완화 (선택)
+        sync: false
