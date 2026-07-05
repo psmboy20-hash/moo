@@ -49,7 +49,13 @@ async function callMessages(content: ContentBlock[], maxTokens = 1024): Promise<
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, messages: [{ role: "user", content }] }),
+    // temperature 0: 같은 입력에 최대한 같은 식별 결과가 나오도록(판정 흔들림 방지)
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      temperature: 0,
+      messages: [{ role: "user", content }],
+    }),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`anthropic ${res.status}`);
