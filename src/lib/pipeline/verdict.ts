@@ -7,13 +7,28 @@ import type {
   ProfitBreakdown,
   RiskFlag,
   SellDifficulty,
+  SellThrough,
   SoldStats,
   Verdict,
   VerdictStatus,
 } from "@/lib/types";
 
-/** 현재 판매중 매물 수로 판매 난이도를 판정한다 */
-export function computeSellDifficulty(active: ActiveStats): SellDifficulty {
+/**
+ * 판매 난이도를 판정한다.
+ * 판매율(sell-through)이 있으면 우선 반영: 잘 팔리면(높은 비율) 매물이 많아도 난이도를 낮춘다.
+ * 판매율이 없으면(데이터 부족) 현재 판매중 매물 수로 근사한다.
+ */
+export function computeSellDifficulty(active: ActiveStats, sellThrough?: SellThrough): SellDifficulty {
+  if (sellThrough && sellThrough.soldCount + sellThrough.activeCount >= 4) {
+    const { ratio, activeCount } = sellThrough;
+    // 잘 팔림: 판매완료 비율이 높으면 경쟁 매물이 있어도 회전이 빠름
+    if (ratio >= 0.6) return activeCount >= THRESHOLDS.highCompetitionListingCount ? "MEDIUM" : "LOW";
+    // 잘 안 팔림: 판매완료 대비 재고가 쌓임
+    if (ratio < 0.25) return "HIGH";
+    // 중간: 매물 수로 보정
+    if (activeCount >= THRESHOLDS.highCompetitionListingCount) return "HIGH";
+    return activeCount >= THRESHOLDS.mediumCompetitionListingCount ? "MEDIUM" : "MEDIUM";
+  }
   if (active.listingCount >= THRESHOLDS.highCompetitionListingCount) return "HIGH";
   if (active.listingCount >= THRESHOLDS.mediumCompetitionListingCount) return "MEDIUM";
   return "LOW";

@@ -8,6 +8,7 @@ import { markMatches } from "@/lib/pipeline/filter";
 import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
 import { computeProfit } from "@/lib/pipeline/profit";
+import { filterRecentSold } from "@/lib/pipeline/recency";
 import { suggestPrices } from "@/lib/pipeline/suggest";
 import { buildBuyDecision, buildVerdict, computeSellDifficulty } from "@/lib/pipeline/verdict";
 import { collectActive, collectSold } from "@/lib/sources";
@@ -20,6 +21,9 @@ import type {
   SearchQueries,
   SoldListing,
 } from "@/lib/types";
+
+/** 판매완료 시세로 인정할 최근 기간(개월) */
+const RECENT_MONTHS = 6;
 
 export interface AnalyzeOverrides {
   /** 이미 알고 있는 식별 정보 (fixture/테스트용) */
@@ -83,33 +87,39 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
   ]);
 
   // 8~9) 동일 제품 검증 + 불일치 제거 (matched 플래그 재판정) + 상태 티어 태깅
-  const sold = tagConditionTiers(markMatches(soldRaw, identity));
+  const soldTagged = tagConditionTiers(markMatches(soldRaw, identity));
   const active = tagConditionTiers(markMatches(activeRaw, identity));
   const targetTier = tierOfIdentity(identity);
 
+  // 최신성: 날짜가 명확한 오래된 판매완료는 시세 계산에서 제외 (날짜 없는 건 유지)
+  const nowMs = Date.now();
+  const sold = filterRecentSold(soldTagged, RECENT_MONTHS, nowMs);
+  const dropped = soldTagged.length - sold.length;
+  if (dropped > 0) notes.push(`최근 ${RECENT_MONTHS}개월 밖의 오래된 판매완료 ${dropped}건을 시세에서 제외했습니다.`);
+
   const matchedSold = sold.filter((l) => l.matched).length;
-  const _matchedActive = active.filter((l) => l.matched).length;
   if (matchedSold === 0) notes.push("동일 제품으로 검증된 판매완료 데이터가 없습니다. 시세 신뢰도가 낮습니다.");
   if (soldRaw.length > 0 && matchedSold === 0) {
     notes.push("수집된 판매완료 매물이 지역판/제품명 불일치로 모두 제외되었습니다.");
   }
 
+  // 12) 경쟁가 분석 + 회전성(sell-through)
+  const activeStats = computeActiveStats(active);
+  const sellThrough = computeSellThrough(sold, active);
+
   // 10~11) 이상치 제거 + 보수/기준/공격 시세 (티어별 포함)
   const soldStats = computeSoldStats(sold, targetTier);
-  // 12) 경쟁가 분석
-  const activeStats = computeActiveStats(active);
 
-  // 판매 난이도
-  const difficulty = computeSellDifficulty(activeStats);
+  // 판매 난이도 (판매율 우선, 없으면 매물 수)
+  const difficulty = computeSellDifficulty(activeStats, sellThrough);
 
   // 13) 판매가 제안
   const suggestion = suggestPrices(soldStats, activeStats, identity, difficulty);
 
-  // 시장별 순이익 + 최적 판매처 + 회전성 + 무게
+  // 시장별 순이익 + 최적 판매처 + 무게
   const weightGrams = estimateWeightGrams(identity.categoryKey, identity.weightGramsEst);
   const markets = computeMarketProfits(sold, listing.priceKRW, weightGrams, targetTier);
   const bestMarket = markets[0]?.market ?? null;
-  const sellThrough = computeSellThrough(sold, active);
 
   // 14~15) 수수료·배송·환율·리스크 반영 순이익/수익률
   // 최적 판매처가 있으면 그 시장 기준을, 없으면(시세 없음) 제안가+기본수수료로 판정.

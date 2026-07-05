@@ -8,6 +8,7 @@ import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets
 import { mean, median, quantile, removeLowNoise, removeOutliersIQR } from "@/lib/pipeline/outliers";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
 import { breakEvenBuyPrice, computeProfit, maxBuyForTargets } from "@/lib/pipeline/profit";
+import { filterRecentSold, parseIsoDateMs } from "@/lib/pipeline/recency";
 import { suggestPrices } from "@/lib/pipeline/suggest";
 import { classifyVerdict, computeSellDifficulty } from "@/lib/pipeline/verdict";
 import type { ActiveListing, ProductIdentity, SoldListing } from "@/lib/types";
@@ -255,16 +256,59 @@ describe("verdict classification (threshold boundaries)", () => {
 });
 
 describe("sell difficulty", () => {
-  it("scales with listing count", () => {
-    expect(
-      computeSellDifficulty({ minCompetitor: 0, avgCompetitor: 0, topTier: 0, buyerPerceivedAvg: 0, listingCount: 2 }),
-    ).toBe("LOW");
-    expect(
-      computeSellDifficulty({ minCompetitor: 0, avgCompetitor: 0, topTier: 0, buyerPerceivedAvg: 0, listingCount: 12 }),
-    ).toBe("MEDIUM");
-    expect(
-      computeSellDifficulty({ minCompetitor: 0, avgCompetitor: 0, topTier: 0, buyerPerceivedAvg: 0, listingCount: 30 }),
-    ).toBe("HIGH");
+  const as = (listingCount: number) => ({
+    minCompetitor: 0,
+    avgCompetitor: 0,
+    topTier: 0,
+    buyerPerceivedAvg: 0,
+    listingCount,
+  });
+
+  it("scales with listing count when no sell-through", () => {
+    expect(computeSellDifficulty(as(2))).toBe("LOW");
+    expect(computeSellDifficulty(as(12))).toBe("MEDIUM");
+    expect(computeSellDifficulty(as(30))).toBe("HIGH");
+  });
+
+  it("sell-through overrides raw count", () => {
+    // 판매율 높고 매물 적음 → 잘 팔림 → LOW
+    expect(computeSellDifficulty(as(10), { soldCount: 20, activeCount: 10, ratio: 0.67, estTurnoverDays: 15 })).toBe(
+      "LOW",
+    );
+    // 판매율 높지만 매물 30개(고경쟁) → MEDIUM
+    expect(computeSellDifficulty(as(30), { soldCount: 45, activeCount: 30, ratio: 0.6, estTurnoverDays: 20 })).toBe(
+      "MEDIUM",
+    );
+    // 판매율 낮음(재고 쌓임) → HIGH
+    expect(computeSellDifficulty(as(8), { soldCount: 1, activeCount: 20, ratio: 0.05, estTurnoverDays: 600 })).toBe(
+      "HIGH",
+    );
+  });
+});
+
+describe("recency filter", () => {
+  const NOW = Date.UTC(2026, 6, 5); // 2026-07-05
+  const s = (soldDate: string | undefined): SoldListing => ({
+    source: "yahoo-auction",
+    title: "x",
+    priceOriginal: 100,
+    currency: "KRW",
+    priceKRW: 100,
+    soldDate,
+    url: "#",
+    matched: true,
+  });
+
+  it("parseIsoDateMs parses YYYY-MM-DD, rejects yearless", () => {
+    expect(parseIsoDateMs("2026-01-15")).toBe(Date.UTC(2026, 0, 15));
+    expect(parseIsoDateMs("07/05")).toBeNull();
+    expect(parseIsoDateMs(undefined)).toBeNull();
+  });
+
+  it("drops dated-old, keeps recent and undated", () => {
+    const out = filterRecentSold([s("2026-06-01"), s("2024-01-01"), s("07/05"), s(undefined)], 6, NOW);
+    expect(out.length).toBe(3); // 2024만 제외
+    expect(out.some((l) => l.soldDate === "2024-01-01")).toBe(false);
   });
 });
 
