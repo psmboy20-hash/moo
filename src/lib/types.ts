@@ -40,6 +40,10 @@ export type VerdictStatus = "RECOMMEND" | "CONDITIONAL" | "HOLD" | "AVOID";
 /** 판매 난이도 */
 export type SellDifficulty = "LOW" | "MEDIUM" | "HIGH";
 
+/** 상품 상태(컨디션) 티어 — 시세를 같은 티어끼리 비교하기 위한 구분 */
+export const CONDITION_TIERS = ["SEALED", "CIB", "LOOSE", "UNKNOWN"] as const;
+export type ConditionTier = (typeof CONDITION_TIERS)[number];
+
 /* ------------------------------------------------------------------ */
 /* Input schemas (Zod)                                                 */
 /* ------------------------------------------------------------------ */
@@ -126,6 +130,8 @@ export interface SoldListing {
   thumbnail?: string;
   /** 동일 제품 검증 통과 여부 */
   matched: boolean;
+  /** 제목에서 분류한 상태 티어 (파이프라인에서 채움) */
+  conditionTier?: ConditionTier;
 }
 
 /** 현재 판매중(active) 매물 1건 */
@@ -142,6 +148,16 @@ export interface ActiveListing {
   url: string;
   thumbnail?: string;
   matched: boolean;
+  /** 제목에서 분류한 상태 티어 (파이프라인에서 채움) */
+  conditionTier?: ConditionTier;
+}
+
+/** 티어별 시세 요약 */
+export interface TierStat {
+  conservative: number;
+  base: number;
+  aggressive: number;
+  sampleN: number;
 }
 
 /** 판매완료 기준 시세 통계 */
@@ -158,6 +174,10 @@ export interface SoldStats {
   rawN: number;
   /** 소스별 대표가 (KRW) */
   bySource: Partial<Record<SoldSourceId, number>>;
+  /** 상태 티어별 시세 (같은 티어끼리 비교용) */
+  byTier: Partial<Record<ConditionTier, TierStat>>;
+  /** 국내 상품 상태에 해당하는 대상 티어 */
+  targetTier: ConditionTier;
 }
 
 /** 현재 판매중 경쟁가 통계 */

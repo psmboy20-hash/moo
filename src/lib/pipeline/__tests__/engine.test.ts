@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEFAULT_FEES } from "@/lib/config/fees";
 import { estimateShippingKRW, estimateWeightGrams } from "@/lib/config/shipping";
+import { classifyTierFromText, tierOfIdentity } from "@/lib/pipeline/condition";
 import { verifyMatch } from "@/lib/pipeline/filter";
 import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { mean, median, quantile, removeLowNoise, removeOutliersIQR } from "@/lib/pipeline/outliers";
@@ -74,6 +75,28 @@ describe("outliers", () => {
 
   it("removeLowNoise keeps data when n<4", () => {
     expect(removeLowNoise([1, 100000])).toEqual([1, 100000]);
+  });
+});
+
+describe("condition tier classification", () => {
+  it("classifies sealed/loose/cib/unknown from KR/JP/EN text", () => {
+    expect(classifyTierFromText("젤다 미개봉 새제품")).toBe("SEALED");
+    expect(classifyTierFromText("スーパーマリオ 未開封")).toBe("SEALED");
+    expect(classifyTierFromText("GBA ソフトのみ 動作確認")).toBe("LOOSE");
+    expect(classifyTierFromText("cartridge only tested")).toBe("LOOSE");
+    expect(classifyTierFromText("箱付き 説明書付き 完品")).toBe("CIB");
+    expect(classifyTierFromText("complete in box CIB")).toBe("CIB");
+    expect(classifyTierFromText("just a title")).toBe("UNKNOWN");
+  });
+
+  it("sealed keyword wins over box", () => {
+    expect(classifyTierFromText("미개봉 박스 포함")).toBe("SEALED");
+  });
+
+  it("tierOfIdentity uses sealed flag then text", () => {
+    expect(tierOfIdentity({ ...identity, sealed: true })).toBe("SEALED");
+    expect(tierOfIdentity({ ...identity, sealed: null, condition: "ソフトのみ", boxState: "" })).toBe("LOOSE");
+    expect(tierOfIdentity({ ...identity, sealed: false, condition: "박스 포함 완품", boxState: "양호" })).toBe("CIB");
   });
 });
 

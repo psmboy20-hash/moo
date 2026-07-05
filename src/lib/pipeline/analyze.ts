@@ -3,6 +3,7 @@ import { fallbackIdentity, fallbackQueries } from "@/lib/ai/fallback";
 import { DEFAULT_FEES, feesForMarket } from "@/lib/config/fees";
 import { getRates } from "@/lib/config/fx";
 import { estimateWeightGrams } from "@/lib/config/shipping";
+import { tagConditionTiers, tierOfIdentity } from "@/lib/pipeline/condition";
 import { markMatches } from "@/lib/pipeline/filter";
 import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
@@ -81,9 +82,10 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
       : collectActive(queries, rates, { imageUrl: listing.images[0] }),
   ]);
 
-  // 8~9) 동일 제품 검증 + 불일치 제거 (matched 플래그 재판정)
-  const sold = markMatches(soldRaw, identity);
-  const active = markMatches(activeRaw, identity);
+  // 8~9) 동일 제품 검증 + 불일치 제거 (matched 플래그 재판정) + 상태 티어 태깅
+  const sold = tagConditionTiers(markMatches(soldRaw, identity));
+  const active = tagConditionTiers(markMatches(activeRaw, identity));
+  const targetTier = tierOfIdentity(identity);
 
   const matchedSold = sold.filter((l) => l.matched).length;
   const _matchedActive = active.filter((l) => l.matched).length;
@@ -92,8 +94,8 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
     notes.push("수집된 판매완료 매물이 지역판/제품명 불일치로 모두 제외되었습니다.");
   }
 
-  // 10~11) 이상치 제거 + 보수/기준/공격 시세
-  const soldStats = computeSoldStats(sold);
+  // 10~11) 이상치 제거 + 보수/기준/공격 시세 (티어별 포함)
+  const soldStats = computeSoldStats(sold, targetTier);
   // 12) 경쟁가 분석
   const activeStats = computeActiveStats(active);
 
@@ -105,7 +107,7 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
 
   // 시장별 순이익 + 최적 판매처 + 회전성 + 무게
   const weightGrams = estimateWeightGrams(identity.categoryKey, identity.weightGramsEst);
-  const markets = computeMarketProfits(sold, listing.priceKRW, weightGrams);
+  const markets = computeMarketProfits(sold, listing.priceKRW, weightGrams, targetTier);
   const bestMarket = markets[0]?.market ?? null;
   const sellThrough = computeSellThrough(sold, active);
 
