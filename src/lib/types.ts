@@ -34,6 +34,32 @@ export function marketOfSource(source: SoldSourceId | ActiveSourceId): MarketId 
   }
 }
 
+/** 소스별 수집 결과 상태 (수집 실패와 "정상적으로 0건"을 구분해 정직하게 표기) */
+export interface SourceStatus {
+  /** 소스 식별자 (예: "yahoo-auction", "pricecharting") */
+  source: string;
+  /** sold(판매완료) / active(판매중) 구분 */
+  kind: "sold" | "active";
+  /** 반환된 매물 수 (매칭 이전 원시 건수) */
+  count: number;
+  /** 수집 자체가 성공했는지 (false = 예외/차단으로 실패, count 0과 구분) */
+  ok: boolean;
+  /** 실패 사유 (짧게, ok=false일 때만) */
+  error?: string;
+}
+
+/** 소스 식별자 → 사람이 읽는 라벨 */
+export const SOURCE_LABEL: Record<string, string> = {
+  ebay: "eBay",
+  "ebay-image": "eBay(이미지검색)",
+  mercari: "Mercari",
+  "yahoo-auction": "Yahoo Auction",
+  pricecharting: "PriceCharting",
+  buyee: "Buyee",
+  fromjapan: "FromJapan",
+  "overseas-mall": "해외몰",
+};
+
 /** 최종 매입 판정 */
 export type VerdictStatus = "RECOMMEND" | "CONDITIONAL" | "HOLD" | "AVOID";
 
@@ -300,6 +326,8 @@ export interface AnalysisResult {
   needsUserConfirm: boolean;
   /** AI 분석이 저하 모드(제목 기반)로 동작했는지 */
   degraded: boolean;
+  /** 소스별 수집 현황 (실데이터 경로에서만 채워짐; fixture/수동 경로는 빈 배열) */
+  sourceStatus: SourceStatus[];
   /** 진단/경고 메시지 */
   notes: string[];
 }

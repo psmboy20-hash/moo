@@ -7,7 +7,51 @@ import { IdentificationCard } from "@/components/result/identification-card";
 import { PricingSuggestionCard } from "@/components/result/pricing-suggestion-card";
 import { SoldPriceCard } from "@/components/result/sold-price-card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import type { AnalysisResult } from "@/lib/types";
+import { type AnalysisResult, SOURCE_LABEL, type SourceStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+/** 소스별 수집 현황 — 실패(차단/레이트리밋)와 "정상 0건"을 구분해 보여준다 */
+function SourceStatusStrip({ statuses }: { statuses: SourceStatus[] }) {
+  if (statuses.length === 0) return null;
+  const groups: { kind: SourceStatus["kind"]; label: string }[] = [
+    { kind: "sold", label: "판매완료" },
+    { kind: "active", label: "판매중" },
+  ];
+  return (
+    <div className="rounded-lg border bg-card px-3 py-2 text-xs">
+      <p className="mb-1.5 font-medium text-muted-foreground">해외 소스 수집 현황</p>
+      <div className="space-y-1.5">
+        {groups.map(({ kind, label }) => {
+          const items = statuses.filter((s) => s.kind === kind);
+          if (items.length === 0) return null;
+          return (
+            <div key={kind} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-14 shrink-0 text-muted-foreground">{label}</span>
+              {items.map((s) => (
+                <span
+                  key={`${s.kind}-${s.source}`}
+                  title={s.ok ? undefined : s.error}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 tabular-nums",
+                    !s.ok
+                      ? "border-destructive/40 text-destructive"
+                      : s.count > 0
+                        ? "border-success/40 text-success"
+                        : "border-border text-muted-foreground",
+                  )}
+                >
+                  {SOURCE_LABEL[s.source] ?? s.source}
+                  {": "}
+                  {s.ok ? `${s.count}건` : "실패"}
+                </span>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 /** 저하 동작·데이터 부족 상황을 사용자에게 명확히 안내한다 */
 function SetupBanner({ result }: { result: AnalysisResult }) {
@@ -69,6 +113,8 @@ export function Results({ result }: { result: AnalysisResult }) {
           <PricingSuggestionCard result={result} />
         </div>
       </div>
+
+      <SourceStatusStrip statuses={result.sourceStatus} />
 
       {result.notes.length > 0 && (
         <div className="space-y-1 text-muted-foreground text-xs">

@@ -20,7 +20,9 @@ import type {
   ProductIdentity,
   SearchQueries,
   SoldListing,
+  SourceStatus,
 } from "@/lib/types";
+import { SOURCE_LABEL } from "@/lib/types";
 
 /** 판매완료 시세로 인정할 최근 기간(개월) */
 const RECENT_MONTHS = 6;
@@ -78,13 +80,27 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
   // 환율
   const rates = overrides.rates ?? (await getRates());
 
-  // 6~7) 판매완료/판매중 수집
-  const [soldRaw, activeRaw] = await Promise.all([
-    overrides.sold ? Promise.resolve(overrides.sold) : collectSold(queries, rates),
+  // 6~7) 판매완료/판매중 수집 (+ 소스별 상태)
+  const [soldCollected, activeCollected] = await Promise.all([
+    overrides.sold
+      ? Promise.resolve({ listings: overrides.sold, statuses: [] as SourceStatus[] })
+      : collectSold(queries, rates),
     overrides.active
-      ? Promise.resolve(overrides.active)
+      ? Promise.resolve({ listings: overrides.active, statuses: [] as SourceStatus[] })
       : collectActive(queries, rates, { imageUrl: listing.images[0] }),
   ]);
+  const soldRaw = soldCollected.listings;
+  const activeRaw = activeCollected.listings;
+  const sourceStatus = [...soldCollected.statuses, ...activeCollected.statuses];
+
+  // 소스 수집 실패는 "정상 0건"과 구분해 정직하게 알린다
+  const failed = sourceStatus.filter((s) => !s.ok);
+  if (failed.length > 0) {
+    const names = [...new Set(failed.map((s) => SOURCE_LABEL[s.source] ?? s.source))].join(", ");
+    notes.push(
+      `일부 시세 소스 수집에 실패했습니다(${names}). 봇 차단·레이트리밋일 수 있어 잠시 후 새로고침하면 개선될 수 있습니다.`,
+    );
+  }
 
   // 8~9) 동일 제품 검증 + 불일치 제거 (matched 플래그 재판정) + 상태 티어 태깅
   const soldTagged = tagConditionTiers(markMatches(soldRaw, identity));
@@ -159,6 +175,7 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
     matchConfidence,
     needsUserConfirm,
     degraded,
+    sourceStatus,
     notes,
   };
 }

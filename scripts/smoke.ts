@@ -67,6 +67,9 @@ async function main() {
       line("최적시장", result.bestMarket ?? "(없음)");
       line("판정", result.verdict.status);
       line("순이익", result.profit.netProfit);
+      for (const s of result.sourceStatus) {
+        line(`[${s.kind}] ${s.source}`, s.ok ? `${s.count}건` : `실패(${s.error ?? ""})`);
+      }
       for (const n of result.notes) line("note", n);
     } catch (e) {
       line("분석 예외", String(e instanceof Error ? e.message : e).slice(0, 160));
