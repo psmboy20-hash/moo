@@ -73,3 +73,25 @@ export function markMatches<T extends { title: string; matched: boolean }>(
 ): T[] {
   return listings.map((l) => ({ ...l, matched: verifyMatch(l.title, identity).matched }));
 }
+
+/**
+ * 동일 제품 매칭 신뢰도(0~100)를 산출한다 (순수 함수).
+ * 구성: 제품 식별 정확도(이미지) + 매칭 표본 지지도 + 미상 식별명 패널티.
+ * 신뢰도가 낮으면 오탐 위험이 커 사용자 확인이 필요하다.
+ */
+export function computeMatchConfidence(
+  identity: ProductIdentity,
+  matchedSoldCount: number,
+  matchedActiveCount: number,
+): number {
+  // 식별명이 비었거나 '미상'이면 매칭 근거가 약함
+  const nameTokens = tokenize(identity.name).filter((t) => !STOPWORDS.has(t));
+  if (nameTokens.length === 0) return 20;
+
+  const support = Math.min(100, (matchedSoldCount + matchedActiveCount) * 15);
+  // 이미지 식별 정확도 70% + 표본 지지도 30% 가중
+  const raw = identity.accuracy * 0.7 + support * 0.3;
+  // 매칭된 근거가 아예 없으면 상한을 낮춘다
+  const cap = matchedSoldCount + matchedActiveCount === 0 ? 45 : 100;
+  return Math.max(0, Math.min(cap, Math.round(raw)));
+}

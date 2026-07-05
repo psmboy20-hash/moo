@@ -108,6 +108,8 @@ export const THRESHOLDS = {
   identityAccuracyMin: 70,
   /** 시세 표본이 이 수 미만이면 데이터 부족 경고 */
   thinDataSampleCount: 3,
+  /** 매칭 신뢰도가 이 값 미만이면 사용자 확인 필요 */
+  matchConfirmMin: 60,
 } as const;
 
 /**

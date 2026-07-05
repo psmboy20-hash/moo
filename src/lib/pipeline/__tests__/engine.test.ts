@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_FEES } from "@/lib/config/fees";
 import { estimateShippingKRW, estimateWeightGrams } from "@/lib/config/shipping";
 import { classifyTierFromText, tierOfIdentity } from "@/lib/pipeline/condition";
-import { verifyMatch } from "@/lib/pipeline/filter";
+import { computeMatchConfidence, verifyMatch } from "@/lib/pipeline/filter";
 import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { mean, median, quantile, removeLowNoise, removeOutliersIQR } from "@/lib/pipeline/outliers";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
@@ -283,6 +283,17 @@ describe("sell difficulty", () => {
     expect(computeSellDifficulty(as(8), { soldCount: 1, activeCount: 20, ratio: 0.05, estTurnoverDays: 600 })).toBe(
       "HIGH",
     );
+  });
+});
+
+describe("match confidence", () => {
+  it("high accuracy + support → high, no name → low, no matches → capped", () => {
+    // 정확도 90 + 매칭 다수 → 높음
+    expect(computeMatchConfidence({ ...identity, accuracy: 90 }, 6, 4)).toBeGreaterThanOrEqual(70);
+    // 식별명 없음 → 20
+    expect(computeMatchConfidence({ ...identity, name: "" }, 6, 4)).toBe(20);
+    // 매칭 0건 → 상한 45로 캡
+    expect(computeMatchConfidence({ ...identity, accuracy: 95 }, 0, 0)).toBeLessThanOrEqual(45);
   });
 });
 

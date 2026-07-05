@@ -294,6 +294,10 @@ export interface AnalysisResult {
   sellThrough: SellThrough;
   /** 추정 무게(g) */
   weightGrams: number;
+  /** 동일 제품 매칭 신뢰도 0~100 (제품 식별 정확도 + 매칭 표본 지지도) */
+  matchConfidence: number;
+  /** 신뢰도가 낮아 사용자 확인이 필요한지 */
+  needsUserConfirm: boolean;
   /** AI 분석이 저하 모드(제목 기반)로 동작했는지 */
   degraded: boolean;
   /** 진단/경고 메시지 */

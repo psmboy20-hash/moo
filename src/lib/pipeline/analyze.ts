@@ -1,10 +1,10 @@
 import { analyzeImages, generateSearchQueries } from "@/lib/ai";
 import { fallbackIdentity, fallbackQueries } from "@/lib/ai/fallback";
-import { DEFAULT_FEES, feesForMarket } from "@/lib/config/fees";
+import { DEFAULT_FEES, feesForMarket, THRESHOLDS } from "@/lib/config/fees";
 import { getRates } from "@/lib/config/fx";
 import { estimateWeightGrams } from "@/lib/config/shipping";
 import { tagConditionTiers, tierOfIdentity } from "@/lib/pipeline/condition";
-import { markMatches } from "@/lib/pipeline/filter";
+import { computeMatchConfidence, markMatches } from "@/lib/pipeline/filter";
 import { computeMarketProfits, computeSellThrough } from "@/lib/pipeline/markets";
 import { computeActiveStats, computeSoldStats } from "@/lib/pipeline/pricing";
 import { computeProfit } from "@/lib/pipeline/profit";
@@ -98,9 +98,19 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
   if (dropped > 0) notes.push(`최근 ${RECENT_MONTHS}개월 밖의 오래된 판매완료 ${dropped}건을 시세에서 제외했습니다.`);
 
   const matchedSold = sold.filter((l) => l.matched).length;
+  const matchedActive = active.filter((l) => l.matched).length;
   if (matchedSold === 0) notes.push("동일 제품으로 검증된 판매완료 데이터가 없습니다. 시세 신뢰도가 낮습니다.");
   if (soldRaw.length > 0 && matchedSold === 0) {
     notes.push("수집된 판매완료 매물이 지역판/제품명 불일치로 모두 제외되었습니다.");
+  }
+
+  // 매칭 신뢰도 (오탐 방지 — 낮으면 사용자 확인 필요)
+  const matchConfidence = computeMatchConfidence(identity, matchedSold, matchedActive);
+  const needsUserConfirm = matchConfidence < THRESHOLDS.matchConfirmMin;
+  if (needsUserConfirm) {
+    notes.push(
+      `동일 제품 매칭 신뢰도가 낮습니다(${matchConfidence}%). 결과를 신뢰하기 전에 후보가 같은 제품인지 확인하세요.`,
+    );
   }
 
   // 12) 경쟁가 분석 + 회전성(sell-through)
@@ -146,6 +156,8 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
     bestMarket,
     sellThrough,
     weightGrams,
+    matchConfidence,
+    needsUserConfirm,
     degraded,
     notes,
   };

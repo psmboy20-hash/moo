@@ -13,6 +13,19 @@ import type { AnalysisResult } from "@/lib/types";
 function SetupBanner({ result }: { result: AnalysisResult }) {
   const noSold = result.sold.stats.sampleN === 0;
 
+  if (result.needsUserConfirm) {
+    return (
+      <Alert>
+        <TriangleAlertIcon />
+        <AlertTitle>동일 제품 매칭 신뢰도가 낮습니다 ({result.matchConfidence}%)</AlertTitle>
+        <AlertDescription>
+          검색된 해외 매물이 정말 같은 제품인지 확실하지 않습니다. 아래 시세·판정을 그대로 믿기 전에, 제품 식별 카드의
+          추정 제품명과 해외 매물이 일치하는지 직접 확인하세요. (다른 제품이 섞이면 순이익·판정이 틀립니다.)
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
   if (result.degraded) {
     return (
       <Alert>
