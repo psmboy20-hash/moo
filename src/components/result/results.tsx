@@ -1,0 +1,128 @@
+import { InfoIcon, TriangleAlertIcon } from "lucide-react";
+
+import { ActivePriceCard } from "@/components/result/active-price-card";
+import { BuyDecisionCard } from "@/components/result/buy-decision-card";
+import { ConclusionCard } from "@/components/result/conclusion-card";
+import { IdentificationCard } from "@/components/result/identification-card";
+import { PricingSuggestionCard } from "@/components/result/pricing-suggestion-card";
+import { SoldPriceCard } from "@/components/result/sold-price-card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { type AnalysisResult, SOURCE_LABEL, type SourceStatus } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+/** 소스별 수집 현황 — 실패(차단/레이트리밋)와 "정상 0건"을 구분해 보여준다 */
+function SourceStatusStrip({ statuses }: { statuses: SourceStatus[] }) {
+  if (statuses.length === 0) return null;
+  const groups: { kind: SourceStatus["kind"]; label: string }[] = [
+    { kind: "sold", label: "판매완료" },
+    { kind: "active", label: "판매중" },
+  ];
+  return (
+    <div className="rounded-lg border bg-card px-3 py-2 text-xs">
+      <p className="mb-1.5 font-medium text-muted-foreground">해외 소스 수집 현황</p>
+      <div className="space-y-1.5">
+        {groups.map(({ kind, label }) => {
+          const items = statuses.filter((s) => s.kind === kind);
+          if (items.length === 0) return null;
+          return (
+            <div key={kind} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-14 shrink-0 text-muted-foreground">{label}</span>
+              {items.map((s) => (
+                <span
+                  key={`${s.kind}-${s.source}`}
+                  title={s.ok ? undefined : s.error}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 tabular-nums",
+                    !s.ok
+                      ? "border-destructive/40 text-destructive"
+                      : s.count > 0
+                        ? "border-success/40 text-success"
+                        : "border-border text-muted-foreground",
+                  )}
+                >
+                  {SOURCE_LABEL[s.source] ?? s.source}
+                  {": "}
+                  {s.ok ? `${s.count}건` : "실패"}
+                </span>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** 저하 동작·데이터 부족 상황을 사용자에게 명확히 안내한다 */
+function SetupBanner({ result }: { result: AnalysisResult }) {
+  const noSold = result.sold.stats.sampleN === 0;
+
+  if (result.needsUserConfirm) {
+    return (
+      <Alert>
+        <TriangleAlertIcon />
+        <AlertTitle>동일 제품 매칭 신뢰도가 낮습니다 ({result.matchConfidence}%)</AlertTitle>
+        <AlertDescription>
+          검색된 해외 매물이 정말 같은 제품인지 확실하지 않습니다. 아래 시세·판정을 그대로 믿기 전에, 제품 식별 카드의
+          추정 제품명과 해외 매물이 일치하는지 직접 확인하세요. (다른 제품이 섞이면 순이익·판정이 틀립니다.)
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (result.degraded) {
+    return (
+      <Alert>
+        <TriangleAlertIcon />
+        <AlertTitle>이미지 AI 식별이 꺼져 있어 정확도가 낮습니다</AlertTitle>
+        <AlertDescription>
+          제목 기반으로만 분석했습니다. 이미지 우선 식별과 해외 시세 매칭을 켜려면 배포 환경(Vercel)에 환경 변수
+          <span className="font-mono"> ANTHROPIC_API_KEY </span>를 설정한 뒤 다시 시도하세요.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  if (noSold) {
+    return (
+      <Alert>
+        <InfoIcon />
+        <AlertTitle>동일 제품으로 검증된 해외 판매완료 시세가 없습니다</AlertTitle>
+        <AlertDescription>
+          PriceCharting은 게임·카드·수집품 위주로 시세를 제공합니다. eBay/Mercari/Yahoo 실시세는 서버 봇 차단으로 별도
+          연동(스크래핑 API 또는 공식 API)이 필요합니다. 그 전까지는 매칭된 소스 기준으로만 판정합니다.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  return null;
+}
+
+export function Results({ result }: { result: AnalysisResult }) {
+  return (
+    <div className="space-y-4">
+      <SetupBanner result={result} />
+      <ConclusionCard result={result} />
+      <div className="grid gap-4 md:grid-cols-2">
+        <IdentificationCard result={result} />
+        <BuyDecisionCard result={result} />
+        <SoldPriceCard result={result} />
+        <ActivePriceCard result={result} />
+        <div className="md:col-span-2">
+          <PricingSuggestionCard result={result} />
+        </div>
+      </div>
+
+      <SourceStatusStrip statuses={result.sourceStatus} />
+
+      {result.notes.length > 0 && (
+        <div className="space-y-1 text-muted-foreground text-xs">
+          {result.notes.map((n) => (
+            <p key={n}>ⓘ {n}</p>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
