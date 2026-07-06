@@ -1,3 +1,4 @@
+import { setAiError } from "@/lib/ai/diag";
 import { coerceIdentity, coerceQueries, extractJson, identityInstruction, queryInstruction } from "@/lib/ai/shared";
 import type { DomesticListing, ProductIdentity, SearchQueries } from "@/lib/types";
 
@@ -71,12 +72,20 @@ export async function analyzeImagesViaApi(listing: DomesticListing): Promise<Pro
   if (!hasAnthropicApiKey()) return null;
   try {
     const images = await downloadImageBlocks(listing.images);
-    if (images.length === 0) return null;
+    if (images.length === 0) {
+      setAiError("API: 상품 이미지를 내려받지 못함");
+      return null;
+    }
     const content: ContentBlock[] = [...images, { type: "text", text: identityInstruction(listing) }];
     const text = await callMessages(content);
     const json = extractJson(text);
-    return json ? coerceIdentity(json) : null;
-  } catch {
+    if (!json) {
+      setAiError(`API: 응답에서 JSON을 못 찾음: ${text.slice(0, 120)}`);
+      return null;
+    }
+    return coerceIdentity(json);
+  } catch (e) {
+    setAiError(`API 호출 실패: ${e instanceof Error ? e.message : String(e)}`.slice(0, 220));
     return null;
   }
 }

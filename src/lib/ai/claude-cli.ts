@@ -1,3 +1,4 @@
+import { setAiError } from "@/lib/ai/diag";
 import { coerceIdentity, coerceQueries, extractJson, queryInstruction } from "@/lib/ai/shared";
 import type { DomesticListing, ProductIdentity, SearchQueries } from "@/lib/types";
 
@@ -84,14 +85,30 @@ Respond with ONLY a JSON object, no prose, matching exactly:
  * CLI 미설치/미인증/타임아웃/파싱 실패 시 null을 반환한다(→ 저하 동작).
  */
 export async function analyzeImagesViaCli(listing: DomesticListing): Promise<ProductIdentity | null> {
-  if (!isClaudeCliEnabled()) return null;
+  if (!isClaudeCliEnabled()) {
+    setAiError("claude CLI 비활성화됨(DISABLE_CLAUDE_CLI=1)");
+    return null;
+  }
   const downloaded = await downloadImages(listing.images);
-  if (!downloaded) return null;
+  if (!downloaded) {
+    setAiError("상품 이미지를 내려받지 못해 CLI 식별을 건너뜀");
+    return null;
+  }
   try {
     const text = await runClaude(identityPromptWithPaths(downloaded.paths, listing));
     const json = extractJson(text);
-    return json ? coerceIdentity(json) : null;
-  } catch {
+    if (!json) {
+      setAiError(`CLI 응답에서 JSON을 못 찾음: ${text.slice(0, 120)}`);
+      return null;
+    }
+    return coerceIdentity(json);
+  } catch (e) {
+    const err = e as { message?: string; stderr?: string; code?: string | number };
+    const detail = [err.code ? `code=${err.code}` : "", err.stderr ?? "", err.message ?? String(e)]
+      .filter(Boolean)
+      .join(" | ")
+      .slice(0, 220);
+    setAiError(`CLI 실행 실패: ${detail}`);
     return null;
   } finally {
     await rm(downloaded.dir, { recursive: true, force: true }).catch(() => undefined);

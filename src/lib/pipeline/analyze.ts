@@ -1,4 +1,5 @@
 import { analyzeImages, generateSearchQueries } from "@/lib/ai";
+import { takeAiError } from "@/lib/ai/diag";
 import { fallbackIdentity, fallbackQueries } from "@/lib/ai/fallback";
 import { DEFAULT_FEES, feesForMarket, THRESHOLDS } from "@/lib/config/fees";
 import { getRates } from "@/lib/config/fx";
@@ -69,6 +70,8 @@ export async function analyze(listing: DomesticListing, overrides: AnalyzeOverri
       identity = fallbackIdentity(listing);
       degraded = true;
       notes.push("AI 이미지 분석을 사용할 수 없어 제목 기반으로 식별했습니다. 정확도가 낮습니다.");
+      const diag = takeAiError();
+      if (diag) notes.push(`AI 진단: ${diag}`);
     }
   }
 
