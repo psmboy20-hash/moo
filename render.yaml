@@ -12,7 +12,9 @@ services:
     healthCheckPath: /
     envVars:
       # 값은 Render 대시보드에서 직접 입력 (sync: false = 코드에 노출 안 함)
-      - key: ANTHROPIC_API_KEY # 이미지 제품 식별 (권장)
+      - key: CLAUDE_CODE_OAUTH_TOKEN # 이미지 식별 — Claude Pro/Max 구독으로, 추가 과금 없음 (PC에서 `claude setup-token`으로 발급)
+        sync: false
+      - key: ANTHROPIC_API_KEY # 이미지 식별 — 종량제 API (구독 토큰을 쓰면 비워둬도 됨)
         sync: false
       - key: EBAY_APP_ID # eBay Browse API + 이미지 검색 (선택)
         sync: false
